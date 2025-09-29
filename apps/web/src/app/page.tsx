@@ -1,46 +1,32 @@
-"use client";
-import { useQuery } from "convex/react";
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-
-const TITLE_TEXT = `
- ██████╗ ███████╗████████╗████████╗███████╗██████╗
- ██╔══██╗██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
- ██████╔╝█████╗     ██║      ██║   █████╗  ██████╔╝
- ██╔══██╗██╔══╝     ██║      ██║   ██╔══╝  ██╔══██╗
- ██████╔╝███████╗   ██║      ██║   ███████╗██║  ██║
- ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝
-
- ████████╗    ███████╗████████╗ █████╗  ██████╗██╗  ██╗
- ╚══██╔══╝    ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝
-    ██║       ███████╗   ██║   ███████║██║     █████╔╝
-    ██║       ╚════██║   ██║   ██╔══██║██║     ██╔═██╗
-    ██║       ███████║   ██║   ██║  ██║╚██████╗██║  ██╗
-    ╚═╝       ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
- `;
+'use client';
+import { api } from '@my-better-t-app/backend/convex/_generated/api';
+import type { SearchResponse } from '@my-better-t-app/backend/convex/search';
+import { useQuery } from 'convex/react';
+import { useState } from 'react';
+import DjSection from '@/components/dj-section';
+import { PlaylistsSection } from '@/components/playlists-section';
 
 export default function Home() {
 	const healthCheck = useQuery(api.healthCheck.get);
+	const [searchResults, setSearchResults] = useState<SearchResponse | null>(
+		null,
+	);
+
+	const handleSearchResults = (results: SearchResponse | null) => {
+		setSearchResults(results);
+	};
 
 	return (
-		<div className="container mx-auto max-w-3xl px-4 py-2">
-			<pre className="overflow-x-auto font-mono text-sm">{TITLE_TEXT}</pre>
-			<div className="grid gap-6">
-				<section className="rounded-lg border p-4">
-					<h2 className="mb-2 font-medium">API Status</h2>
-					<div className="flex items-center gap-2">
-						<div
-							className={`h-2 w-2 rounded-full ${healthCheck === "OK" ? "bg-green-500" : healthCheck === undefined ? "bg-orange-400" : "bg-red-500"}`}
-						/>
-						<span className="text-sm text-muted-foreground">
-							{healthCheck === undefined
-								? "Checking..."
-								: healthCheck === "OK"
-									? "Connected"
-									: "Error"}
-						</span>
-					</div>
-				</section>
-			</div>
-		</div>
+		<>
+			<div
+				className='-z-10 fixed inset-0'
+				style={{
+					backgroundImage:
+						'radial-gradient(1200px 600px at 10% -10%, rgba(99,102,241,0.12), rgba(0,0,0,0)), radial-gradient(1200px 600px at 90% -10%, rgba(56,189,248,0.10), rgba(0,0,0,0))',
+				}}
+			/>
+			<DjSection setDj={() => {}} onSearchResults={handleSearchResults} />
+			<PlaylistsSection searchResults={searchResults} />
+		</>
 	);
 }
