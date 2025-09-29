@@ -19,6 +19,8 @@ const buttonVariants = cva(
 					'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
 				ghost:
 					'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
+				playlistItem:
+					'h-auto w-full justify-start border-0 bg-transparent text-left hover:bg-white/10',
 				link: 'text-primary underline-offset-4 hover:underline',
 				play: 'rounded-full bg-emerald-500/20 text-emerald-400 transition-colors hover:bg-emerald-500/30',
 				gradient:
@@ -27,7 +29,7 @@ const buttonVariants = cva(
 				more: 'p-1 text-white/40 opacity-0 transition-opacity hover:text-white/80 group-hover:opacity-100',
 			},
 			size: {
-				default: 'h-9 px-4 py-2 has-[>svg]:px-3',
+				default: 'px-4 py-2 has-[>svg]:px-3',
 				sm: 'h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5',
 				lg: 'h-10 rounded-md px-6 has-[>svg]:px-4',
 				icon: 'size-9',

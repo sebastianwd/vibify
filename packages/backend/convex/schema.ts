@@ -6,4 +6,16 @@ export default defineSchema({
 		text: v.string(),
 		completed: v.boolean(),
 	}),
+	playlists: defineTable({
+		title: v.string(),
+		songs: v.array(
+			v.object({
+				artist: v.string(),
+				title: v.string(),
+			}),
+		),
+		searchQuery: v.string(),
+		sourceUrl: v.optional(v.string()),
+		createdAt: v.number(),
+	}).index('by_created_at', ['createdAt']),
 });

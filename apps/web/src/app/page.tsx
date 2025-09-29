@@ -1,5 +1,6 @@
 'use client';
 import { api } from '@my-better-t-app/backend/convex/_generated/api';
+import type { Id } from '@my-better-t-app/backend/convex/_generated/dataModel';
 import type { SearchResponse } from '@my-better-t-app/backend/convex/search';
 import { useQuery } from 'convex/react';
 import { useState } from 'react';
@@ -11,10 +12,25 @@ export default function Home() {
 	const [searchResults, setSearchResults] = useState<SearchResponse | null>(
 		null,
 	);
+	const [selectedPlaylistId, setSelectedPlaylistId] =
+		useState<Id<'playlists'> | null>(null);
 
 	const handleSearchResults = (results: SearchResponse | null) => {
 		setSearchResults(results);
+		setSelectedPlaylistId(null); // Clear selected playlist when search is performed
 	};
+
+	// Get current playlist to display
+	const currentPlaylist =
+		searchResults?.success && searchResults.data
+			? {
+					title:
+						searchResults.data.playlistTitle ||
+						searchResults.originalQuery ||
+						'',
+					songs: searchResults.data.songs,
+				}
+			: null;
 
 	return (
 		<>
@@ -26,7 +42,11 @@ export default function Home() {
 				}}
 			/>
 			<DjSection setDj={() => {}} onSearchResults={handleSearchResults} />
-			<PlaylistsSection searchResults={searchResults} />
+			<PlaylistsSection
+				selectedPlaylistId={selectedPlaylistId}
+				setSelectedPlaylistId={setSelectedPlaylistId}
+				currentPlaylist={currentPlaylist}
+			/>
 		</>
 	);
 }

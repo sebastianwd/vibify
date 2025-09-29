@@ -1,13 +1,12 @@
 // components/Hero.tsx
 /** biome-ignore-all lint/correctness/useUniqueElementIds: <explanation> */
-/** biome-ignore-all lint/a11y/noSvgWithoutTitle: <explanation> */
-
 import { Icon } from '@iconify/react';
 import { api } from '@my-better-t-app/backend/convex/_generated/api';
 import type { SearchResponse } from '@my-better-t-app/backend/convex/search';
 import { useAction } from 'convex/react';
 import { useState } from 'react';
 import { Button } from './ui/button';
+import { VapiWidget } from './vapi-widget';
 
 type HeroProps = {
 	setDj: (dj: string) => void;
@@ -16,9 +15,81 @@ type HeroProps = {
 
 export default function Hero({ setDj, onSearchResults }: HeroProps) {
 	const [input, setInput] = useState('');
+	const [isListening, setIsListening] = useState(false);
 	const [isSearching, setIsSearching] = useState(false);
 
 	const searchGoogle = useAction(api.search.searchGoogle);
+
+	const vapiWidget = VapiWidget({
+		apiKey: process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || '',
+		assistantId: process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || '',
+		onCallStart: () => {
+			setIsListening(true);
+			console.log('Voice call started');
+		},
+		onCallEnd: () => {
+			setIsListening(false);
+			setIsSearching(false);
+			console.log('Voice call ended');
+		},
+		onFunctionCall: async (functionCall, vapiRef) => {
+			console.log('Function call:', functionCall);
+			console.log('Function call2:', functionCall.function.name);
+			if (functionCall.function.name === 'search_music') {
+				const query = functionCall.function.arguments.query as string;
+
+				// Switch to searching state
+				setIsSearching(true);
+				setIsListening(false);
+
+				// Say "Searching..." immediately
+				vapiRef.current?.say('Searching for your music now...');
+
+				try {
+					const result = await searchGoogle({ query });
+					onSearchResults?.(result);
+					console.log('Voice search completed:', result);
+
+					// Say success message
+					const songCount =
+						result.success && result.data?.songs ? result.data.songs.length : 0;
+					if (songCount > 0) {
+						vapiRef.current?.say(
+							`Perfect! I found ${songCount} songs for you.`,
+							true,
+						);
+					} else {
+						vapiRef.current?.say(
+							`Hmm, I couldn't find any songs. Try asking for a different genre or mood!`,
+						);
+						// Switch back to listening for retry
+						setIsListening(true);
+						setIsSearching(false);
+					}
+				} catch (error) {
+					console.error('Voice search error:', error);
+					vapiRef.current?.say(
+						'Sorry, I ran into an issue searching for music. Please try again!',
+					);
+					// Switch back to listening for retry
+					setIsListening(true);
+					setIsSearching(false);
+				}
+			}
+		},
+		onError: (error) => {
+			console.error('Vapi error:', error);
+			setIsListening(false);
+			setIsSearching(false);
+		},
+		onTranscript: (transcript, role) => {
+			if (role === 'user') {
+				console.log('User said:', transcript);
+				// Optionally update the input field with voice input
+				// setInput(transcript);
+			}
+		},
+	});
 
 	const shuffleDjs = [
 		'Chill Vibes',
@@ -50,12 +121,13 @@ export default function Hero({ setDj, onSearchResults }: HeroProps) {
 	};
 
 	const handleVoiceSearchStart = () => {
-		setIsSearching(true);
-	};
-
-	const handleVoiceSearchComplete = (results: any) => {
-		onSearchResults?.(results);
-		setIsSearching(false);
+		if (isListening) {
+			// If already listening, stop the call
+			vapiWidget.stopCall();
+		} else {
+			// Start listening
+			vapiWidget.startCall();
+		}
 	};
 
 	return (
@@ -93,25 +165,47 @@ export default function Hero({ setDj, onSearchResults }: HeroProps) {
 								/
 							</span>
 							<Button
-								type='submit'
 								id='micBtn'
 								variant='gradient'
 								size='gradient'
-								aria-pressed='false'
+								aria-pressed={!!isListening}
 								disabled={isSearching}
+								onClick={handleVoiceSearchStart}
+								className={isListening ? 'animate-pulse' : ''}
+								title={isListening ? 'Stop listening' : 'Start voice search'}
 							>
-								<Icon icon='lucide:mic' className='h-6 w-6 text-white' />
-								{/* Live ring */}
-								<span
-									id='micPulse'
-									className='pointer-events-none absolute inset-0 rounded-full opacity-0 ring-4 ring-sky-400/30'
+								<Icon
+									icon={isListening ? 'lucide:mic-2' : 'lucide:mic'}
+									className='h-6 w-6 text-white'
 								/>
+								{/* Live ring - only when listening */}
+								{isListening && (
+									<span
+										id='micPulse'
+										className='pointer-events-none absolute inset-0 animate-ping rounded-full ring-4 ring-sky-400/50'
+									/>
+								)}
 							</Button>
 						</div>
 					</div>
+					{/* Status messages */}
+					{isListening && (
+						<div className='mt-3 text-center'>
+							<p className='flex items-center justify-center gap-2 text-emerald-400 text-sm'>
+								<Icon
+									icon='lucide:waveform'
+									className='h-4 w-4 animate-pulse'
+								/>
+								Listening...
+							</p>
+						</div>
+					)}
 					{isSearching && (
 						<div className='mt-3 text-center'>
-							<p className='text-sm text-white/60'>Searching...</p>
+							<p className='flex items-center justify-center gap-2 text-blue-400 text-sm'>
+								<Icon icon='lucide:loader' className='h-4 w-4 animate-spin' />
+								Searching...
+							</p>
 						</div>
 					)}
 					<div className='mt-3 flex items-center justify-between'>

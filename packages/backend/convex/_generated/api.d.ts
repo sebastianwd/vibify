@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
+import type * as playlists from "../playlists.js";
 import type * as privateData from "../privateData.js";
 import type * as search from "../search.js";
 import type * as todos from "../todos.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   healthCheck: typeof healthCheck;
   http: typeof http;
+  playlists: typeof playlists;
   privateData: typeof privateData;
   search: typeof search;
   todos: typeof todos;

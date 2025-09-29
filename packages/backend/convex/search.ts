@@ -4,7 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@convex-dev/agent';
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { v } from 'convex/values';
-import { components } from './_generated/api';
+import { api, components, internal } from './_generated/api';
 import { action } from './_generated/server';
 
 // Types - using implicit typing and derived types
@@ -28,8 +28,9 @@ type SearchData = {
 	relevantUrls: string[];
 	selectedUrl: string;
 	scrapedContent: any;
-	songNames: string[];
+	songs: Array<{ artist: string; title: string }>;
 	playlistTitle: string;
+	playlistId?: string; // Added playlistId
 };
 
 export type SearchResponse = {
@@ -231,10 +232,12 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 			console.log('Extracted song names:', songNames);
 			console.log('Generated playlist title:', playlistTitle);
 
+			const uniqueSongNames = [...new Set(songNames)];
+
 			// Check if we have less than 10 tracks and retry if needed
-			if (songNames.length < 10) {
+			if (uniqueSongNames.length < 10) {
 				console.log(
-					`Only found ${songNames.length} tracks, retrying search...`,
+					`Only found ${uniqueSongNames.length} tracks, retrying search...`,
 				);
 
 				// Try scraping the other relevant URLs to get more songs
@@ -259,18 +262,25 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 						);
 
 						// Combine songs and remove duplicates
-						const combinedSongs = [
-							...new Set([...songNames, ...additionalSongNames]),
+						const combinedSongStrings = [
+							...new Set([...uniqueSongNames, ...additionalSongNames]),
 						];
+
+						// Transform to structured format
+						const combinedSongs = combinedSongStrings.map((songString) => {
+							const [artist, title] = songString.includes(' - ')
+								? songString.split(' - ', 2)
+								: ['Unknown Artist', songString];
+							return {
+								artist: artist.trim(),
+								title: title.trim(),
+							};
+						});
+
 						console.log(`Total unique songs: ${combinedSongs.length}`);
 
 						if (combinedSongs.length >= 10) {
 							// Generate new title for combined songs
-							const { title: combinedTitle } = await extractSongsFromContent(
-								thread,
-								`Songs: ${combinedSongs.join(', ')}`,
-								args.query,
-							);
 
 							return {
 								success: true,
@@ -280,8 +290,8 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 									relevantUrls,
 									selectedUrl: url, // Update to the URL that gave us more results
 									scrapedContent: additionalScrapeResult,
-									songNames: combinedSongs,
-									playlistTitle: combinedTitle,
+									songs: combinedSongs,
+									playlistTitle,
 								},
 								originalQuery: args.query,
 								optimizedQuery,
@@ -295,6 +305,26 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 				}
 			}
 
+			// Parse songs into structured format for saving
+			const structuredSongs = uniqueSongNames.map((songName) => {
+				const [artist, songTitle] = songName.includes(' - ')
+					? songName.split(' - ', 2)
+					: ['Unknown Artist', songName];
+
+				return {
+					artist: artist.trim(),
+					title: songTitle.trim(),
+				};
+			});
+
+			// Schedule playlist save for background execution (non-blocking)
+			await ctx.scheduler.runAfter(0, api.playlists.savePlaylist, {
+				title: playlistTitle,
+				songs: structuredSongs,
+				searchQuery: optimizedQuery,
+				sourceUrl: selectedUrl,
+			});
+
 			return {
 				success: true,
 				data: {
@@ -303,7 +333,7 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 					relevantUrls,
 					selectedUrl,
 					scrapedContent: scrapeResult,
-					songNames,
+					songs: structuredSongs,
 					playlistTitle,
 				},
 				originalQuery: args.query,

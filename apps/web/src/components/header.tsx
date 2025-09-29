@@ -6,24 +6,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ModeToggle } from './mode-toggle';
 
-const vapi = new Vapi(process.env.NEXT_PUBLIC_VAPI_KEY!);
-
-// Start voice conversation
-
-vapi.start('dd7fd2c1-6512-47f0-8a15-bb81e49eac15');
-
-// Listen for events
-
-vapi.on('call-start', () => console.log('Call started'));
-
-vapi.on('call-end', () => console.log('Call ended'));
-
-vapi.on('message', (message) => {
-	if (message.type === 'transcript') {
-		console.log(`${message.role}: ${message.transcript}`);
-	}
-});
-
 export default function Header({ className }: { className?: string }) {
 	const links = [
 		{ to: '/', label: 'Home' },

@@ -1,12 +1,37 @@
 import { Icon } from '@iconify/react';
-import type { SearchResponse } from '@my-better-t-app/backend/convex/search';
+import { api } from '@my-better-t-app/backend/convex/_generated/api';
+import type { Id } from '@my-better-t-app/backend/convex/_generated/dataModel';
+import { useQuery } from 'convex/react';
 import { Button } from './ui/button';
 
+type CurrentPlaylist = {
+	title: string;
+	songs: Array<{ artist: string; title: string }>;
+} | null;
+
 type PlaylistsSectionProps = {
-	searchResults?: SearchResponse | null;
+	selectedPlaylistId: Id<'playlists'> | null;
+	setSelectedPlaylistId: (id: Id<'playlists'> | null) => void;
+	currentPlaylist: CurrentPlaylist;
 };
 
-export const PlaylistsSection = ({ searchResults }: PlaylistsSectionProps) => {
+export const PlaylistsSection = ({
+	selectedPlaylistId,
+	setSelectedPlaylistId,
+	currentPlaylist,
+}: PlaylistsSectionProps) => {
+	// Fetch saved playlists from Convex
+	const savedPlaylists = useQuery(api.playlists.getPlaylists, { limit: 10 });
+
+	// Fetch selected playlist data when ID is set
+	const selectedPlaylist = useQuery(
+		api.playlists.getPlaylist,
+		selectedPlaylistId ? { playlistId: selectedPlaylistId } : 'skip',
+	);
+
+	// Determine what to display (prioritize selected playlist from history, fall back to current search)
+	const displayData = selectedPlaylist || currentPlaylist;
+
 	return (
 		<section className='mt-6 mb-40 md:mb-36'>
 			{/* Header */}
@@ -19,31 +44,59 @@ export const PlaylistsSection = ({ searchResults }: PlaylistsSectionProps) => {
 				{/* History Panel */}
 				<div className='order-2 w-full lg:order-0 lg:w-64 lg:flex-shrink-0'>
 					<div className='h-full rounded-2xl bg-white/5 p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur'>
-						<h3 className='font-medium text-white'>History</h3>
-						<div className='flex h-full flex-col items-center justify-center pb-4 text-center'>
-							<div className='mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
-								<Icon icon='lucide:clock' className='h-6 w-6 text-white' />
+						<h3 className='mb-4 font-medium text-white'>History</h3>
+						{savedPlaylists && savedPlaylists.length > 0 ? (
+							<div className='space-y-1'>
+								{savedPlaylists.map((playlist) => (
+									<Button
+										key={playlist._id}
+										variant='playlistItem'
+										className={`group flex items-center gap-2 rounded-lg transition-colors ${
+											selectedPlaylistId === playlist._id
+												? 'bg-white/10 ring-1 ring-emerald-400/50'
+												: ''
+										}`}
+										onClick={() => setSelectedPlaylistId(playlist._id)}
+									>
+										<div className='flex min-w-0 flex-1 flex-col gap-1'>
+											<p className='truncate font-medium text-sm text-white'>
+												{playlist.title}
+											</p>
+											<p className='text-white/50 text-xs'>
+												{playlist.songs.length} tracks
+											</p>
+										</div>
+										<Icon
+											icon='lucide:play'
+											className='h-3 w-3 text-white/40'
+										/>
+									</Button>
+								))}
 							</div>
-							<h4 className='mb-2 font-medium text-sm text-white'>
-								No history yet
-							</h4>
-							<p className='mb-4 text-white/60 text-xs'>
-								Your created playlists will appear here
-							</p>
-							<Button variant='outline' size='sm' className='text-xs'>
-								<Icon icon='lucide:log-in' className='h-3 w-3' />
-								Sign in to save
-							</Button>
-						</div>
+						) : (
+							<div className='flex h-full flex-col items-center justify-center pb-4 text-center'>
+								<div className='mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
+									<Icon icon='lucide:clock' className='h-6 w-6 text-white' />
+								</div>
+								<h4 className='mb-2 font-medium text-sm text-white'>
+									No history yet
+								</h4>
+								<p className='mb-4 text-white/60 text-xs'>
+									Your created playlists will appear here
+								</p>
+								<Button variant='outline' size='sm' className='text-xs'>
+									<Icon icon='lucide:log-in' className='h-3 w-3' />
+									Sign in to save
+								</Button>
+							</div>
+						)}
 					</div>
 				</div>
 
 				{/* Main Playlist Content */}
 				<div className='flex-1'>
 					<div className='max-h-[50svh] overflow-y-auto rounded-2xl bg-white/5 px-6 shadow-[0_12px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur sm:px-8'>
-						{searchResults &&
-						searchResults.success &&
-						searchResults.data?.songNames ? (
+						{displayData ? (
 							<>
 								{/* Playlist Header */}
 								<div className='sticky top-0 flex items-center gap-4 bg-[#10141E] py-6'>
@@ -54,21 +107,22 @@ export const PlaylistsSection = ({ searchResults }: PlaylistsSectionProps) => {
 									</Button>
 									<div>
 										<h3 className='font-medium text-lg text-white'>
-											{searchResults.data.playlistTitle ||
-												searchResults.originalQuery}
+											{displayData.title}
 										</h3>
 										<p className='text-sm text-white/60'>
-											{searchResults.data.songNames.length} tracks • Generated
-											playlist
+											{displayData.songs.length} tracks •{' '}
+											{selectedPlaylist
+												? 'Saved playlist'
+												: 'Generated playlist'}
 										</p>
 									</div>
 								</div>
 
 								{/* Song List */}
 								<div className='space-y-1'>
-									{searchResults.data.songNames.map((song, index) => (
+									{displayData.songs.map((song, index) => (
 										<div
-											key={song}
+											key={`${song.artist}-${song.title}-${index}`}
 											className='group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/5'
 										>
 											{/* Play icon */}
@@ -84,14 +138,9 @@ export const PlaylistsSection = ({ searchResults }: PlaylistsSectionProps) => {
 											{/* Track info */}
 											<div className='min-w-0 flex-1'>
 												<p className='truncate font-medium text-sm text-white'>
-													{song}
+													{song.title}
 												</p>
-												<p className='text-white/50 text-xs'>
-													{new Date().toLocaleDateString('en-US', {
-														month: 'short',
-														day: 'numeric',
-													})}
-												</p>
+												<p className='text-white/50 text-xs'>{song.artist}</p>
 											</div>
 
 											{/* More options */}
