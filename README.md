@@ -2,7 +2,7 @@
 
 Vibify combines AI assistance with music discovery, allowing you to find and enjoy music through playlist generation and community sharing.
 
-<img width="1004" height="814" alt="image" src="https://github.com/user-attachments/assets/42a00c3f-d999-4a91-b79e-0ff0d19dfa49" />
+<img width="1002" height="856" alt="image" src="https://github.com/user-attachments/assets/10173b08-61c2-4447-8896-5067815009f8" />
 
 ## Features
 
