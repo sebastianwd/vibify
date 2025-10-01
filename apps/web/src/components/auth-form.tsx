@@ -69,7 +69,7 @@ export function AuthForm({
 						className='font-geist text-white text-xl tracking-tight'
 						style={{ fontWeight: 600 }}
 					>
-						{mode === 'signin' ? 'Welcome back' : 'Join VYB'}
+						{mode === 'signin' ? 'Welcome back' : 'Join Vibify'}
 					</h2>
 					<p className='mt-2 font-geist text-sm text-white/70'>
 						{mode === 'signin'

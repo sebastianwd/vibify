@@ -216,15 +216,6 @@ export default function Hero({ setDj, onSearchResults }: HeroProps) {
 								Type a prompt or click the mic to talk to your AI DJ.
 							</p>
 						</div>
-						<Button
-							id='shufflePersona'
-							variant='ghost'
-							className='hidden items-center gap-1.5 text-sm text-white/70 transition-colors hover:text-white sm:inline-flex'
-							type='button'
-						>
-							<Icon icon='lucide:shuffle' className='h-4 w-4' />
-							<span className='font-geist'>Change DJ</span>
-						</Button>
 					</div>
 				</form>
 			</div>
