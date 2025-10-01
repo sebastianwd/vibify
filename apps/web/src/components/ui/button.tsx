@@ -20,7 +20,7 @@ const buttonVariants = cva(
 				ghost:
 					'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
 				playlistItem:
-					'h-auto w-full justify-start border-0 bg-transparent text-left hover:bg-white/10',
+					'h-auto justify-start border-0 bg-transparent text-left hover:bg-white/10',
 				link: 'text-primary underline-offset-4 hover:underline',
 				play: 'rounded-full bg-emerald-500/20 text-emerald-400 transition-colors hover:bg-emerald-500/30',
 				gradient:

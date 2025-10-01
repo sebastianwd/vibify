@@ -1,8 +1,28 @@
 import { Icon } from '@iconify/react';
 import { api } from '@my-better-t-app/backend/convex/_generated/api';
 import type { Id } from '@my-better-t-app/backend/convex/_generated/dataModel';
-import { useQuery } from 'convex/react';
+import {
+	Authenticated,
+	AuthLoading,
+	Unauthenticated,
+	useMutation,
+	useQuery,
+} from 'convex/react';
+import { AnimatePresence, motion } from 'motion/react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect } from 'react';
+import { toast } from 'sonner';
+import { usePlaySong } from '@/hooks/use-play-song';
+import {
+	containerVariants,
+	itemVariants,
+	loadingVariants,
+} from '@/lib/animations';
+import { usePlayerState } from '@/store/use-player';
+import { CommunityPlaylists } from './community-playlists';
+import { SongList } from './song-list';
 import { Button } from './ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
 type CurrentPlaylist = {
 	title: string;
@@ -15,15 +35,66 @@ type PlaylistsSectionProps = {
 	currentPlaylist: CurrentPlaylist;
 };
 
+const HistoryLoadingState = () => {
+	return (
+		<div className='flex flex-col items-center justify-center py-8 text-center'>
+			<div className='mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
+				<Icon
+					icon='lucide:loader'
+					className='h-4 w-4 animate-spin text-white'
+				/>
+			</div>
+			<p className='text-white/60 text-xs'>Loading history...</p>
+		</div>
+	);
+};
+
 export const PlaylistsSection = ({
 	selectedPlaylistId,
 	setSelectedPlaylistId,
 	currentPlaylist,
 }: PlaylistsSectionProps) => {
-	// Fetch saved playlists from Convex
-	const savedPlaylists = useQuery(api.playlists.getPlaylists, { limit: 10 });
+	const router = useRouter();
+	const searchParams = useSearchParams();
+	const pathname = usePathname();
 
-	// Fetch selected playlist data when ID is set
+	// Check authentication status
+	const user = useQuery(api.auth.getCurrentUser);
+
+	// Fetch saved playlists from Convex (only if authenticated)
+	const savedPlaylists = useQuery(
+		api.playlists.getPlaylists,
+		user ? { limit: 10 } : 'skip',
+	);
+
+	const removeSongFromPlaylist = useMutation(
+		api.playlists.removeSongFromPlaylist,
+	);
+	const deletePlaylist = useMutation(api.playlists.deletePlaylist);
+
+	// Handle URL parameter for playlist sharing
+	useEffect(() => {
+		const playlistIdFromUrl = searchParams.get('playlistId');
+		if (playlistIdFromUrl && playlistIdFromUrl !== selectedPlaylistId) {
+			setSelectedPlaylistId(playlistIdFromUrl as Id<'playlists'>);
+			router.replace('/');
+		}
+	}, [
+		searchParams,
+		selectedPlaylistId,
+		setSelectedPlaylistId,
+		router,
+		pathname,
+	]);
+
+	// Share playlist function
+	const sharePlaylist = useCallback(async (playlistId: Id<'playlists'>) => {
+		const shareUrl = `${window.location.origin}?playlistId=${playlistId}`;
+		await navigator.clipboard.writeText(shareUrl);
+		toast.success('Playlist URL copied to clipboard!');
+	}, []);
+
+	// Fetch selected playlist data when ID is set (works for both user playlists and community playlists)
 	const selectedPlaylist = useQuery(
 		api.playlists.getPlaylist,
 		selectedPlaylistId ? { playlistId: selectedPlaylistId } : 'skip',
@@ -32,31 +103,119 @@ export const PlaylistsSection = ({
 	// Determine what to display (prioritize selected playlist from history, fall back to current search)
 	const displayData = selectedPlaylist || currentPlaylist;
 
-	return (
-		<section className='mt-6 mb-40 md:mb-36'>
-			{/* Header */}
-			<div className='mb-6'>
-				<h2 className='font-medium text-white text-xl'>Playlists</h2>
-			</div>
+	// Check if we're loading a selected playlist
+	const isLoadingPlaylist =
+		selectedPlaylistId && selectedPlaylist === undefined;
 
-			{/* Main Content */}
-			<div className='flex flex-col gap-6 lg:flex-row'>
-				{/* History Panel */}
-				<div className='order-2 w-full lg:order-0 lg:w-64 lg:flex-shrink-0'>
-					<div className='h-full rounded-2xl bg-white/5 p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur'>
-						<h3 className='mb-4 font-medium text-white'>History</h3>
-						{savedPlaylists && savedPlaylists.length > 0 ? (
-							<div className='space-y-1'>
+	const { onPlaySong } = usePlaySong({
+		songs: displayData?.songs || [],
+		songsIdentifier: selectedPlaylistId || '',
+	});
+
+	// Get player state for play/pause functionality
+	const currentSong = usePlayerState((state) => state.currentSong);
+	const isPlaying = usePlayerState((state) => state.isPlaying);
+	const setIsPlaying = usePlayerState((state) => state.setIsPlaying);
+
+	// Handle removing a song from playlist
+	const handleRemoveSong = useCallback(
+		async (song: { artist: string; title: string }, index: number) => {
+			if (!selectedPlaylistId) return;
+
+			try {
+				await removeSongFromPlaylist({
+					playlistId: selectedPlaylistId,
+					songIndex: index,
+				});
+
+				// Also remove from player queue if it exists
+				const removeFromQueue = usePlayerState.getState().removeFromQueue;
+				removeFromQueue(song);
+
+				toast.success('Song removed from playlist');
+			} catch (error) {
+				console.error('Error removing song:', error);
+				toast.error('Failed to remove song from playlist');
+			}
+		},
+		[selectedPlaylistId, removeSongFromPlaylist],
+	);
+
+	// Handle deleting a playlist
+	const handleDeletePlaylist = useCallback(
+		async (playlistId: Id<'playlists'>) => {
+			try {
+				await deletePlaylist({ playlistId });
+				toast.success('Playlist deleted');
+				// Clear selection if deleted playlist was selected
+				if (selectedPlaylistId === playlistId) {
+					setSelectedPlaylistId(null);
+				}
+			} catch (error) {
+				console.error('Error deleting playlist:', error);
+				toast.error('Failed to delete playlist');
+			}
+		},
+		[deletePlaylist, selectedPlaylistId],
+	);
+
+	const renderHistory = () => {
+		return (
+			<>
+				<AuthLoading>
+					<div className='mt-[40%] p-4 pt-0'>
+						<HistoryLoadingState />
+					</div>
+				</AuthLoading>
+				<Unauthenticated>
+					<div className='mt-[40%] flex flex-col items-center justify-center pb-4 text-center'>
+						<div className='mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
+							<Icon icon='lucide:log-in' className='h-6 w-6 text-white' />
+						</div>
+						<h4 className='mb-2 font-medium text-sm text-white'>
+							Sign in to save playlists
+						</h4>
+						<p className='mb-4 text-white/60 text-xs'>
+							Your created playlists will appear here
+						</p>
+						<Button variant='outline' size='sm' className='text-xs'>
+							<Icon icon='lucide:log-in' className='h-3 w-3' />
+							Sign in to save
+						</Button>
+					</div>
+				</Unauthenticated>
+				<Authenticated>
+					<div className='p-4'>
+						{savedPlaylists === undefined ? (
+							<div className='flex flex-col items-center justify-center py-8 text-center'>
+								<div className='mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
+									<Icon
+										icon='lucide:loader'
+										className='h-4 w-4 animate-spin text-white'
+									/>
+								</div>
+								<p className='text-white/60 text-xs'>Loading history...</p>
+							</div>
+						) : savedPlaylists.length > 0 ? (
+							<motion.div
+								variants={containerVariants}
+								initial='hidden'
+								animate='visible'
+								className='space-y-1'
+							>
 								{savedPlaylists.map((playlist) => (
 									<Button
 										key={playlist._id}
 										variant='playlistItem'
-										className={`group flex items-center gap-2 rounded-lg transition-colors ${
+										className={`flex w-full items-center gap-2 rounded-lg transition-colors ${
 											selectedPlaylistId === playlist._id
 												? 'bg-white/10 ring-1 ring-emerald-400/50'
 												: ''
 										}`}
 										onClick={() => setSelectedPlaylistId(playlist._id)}
+										disabled={
+											!!isLoadingPlaylist && selectedPlaylistId === playlist._id
+										}
 									>
 										<div className='flex min-w-0 flex-1 flex-col gap-1'>
 											<p className='truncate font-medium text-sm text-white'>
@@ -66,20 +225,28 @@ export const PlaylistsSection = ({
 												{playlist.songs.length} tracks
 											</p>
 										</div>
-										<Icon
-											icon='lucide:play'
-											className='h-3 w-3 text-white/40'
-										/>
+										{isLoadingPlaylist &&
+										selectedPlaylistId === playlist._id ? (
+											<Icon
+												icon='lucide:loader'
+												className='h-3 w-3 animate-spin text-white/40'
+											/>
+										) : (
+											<Icon
+												icon='lucide:play'
+												className='h-3 w-3 text-white/40'
+											/>
+										)}
 									</Button>
 								))}
-							</div>
+							</motion.div>
 						) : (
 							<div className='flex h-full flex-col items-center justify-center pb-4 text-center'>
 								<div className='mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
 									<Icon icon='lucide:clock' className='h-6 w-6 text-white' />
 								</div>
 								<h4 className='mb-2 font-medium text-sm text-white'>
-									No history yet
+									No playlists yet
 								</h4>
 								<p className='mb-4 text-white/60 text-xs'>
 									Your created playlists will appear here
@@ -91,497 +258,190 @@ export const PlaylistsSection = ({
 							</div>
 						)}
 					</div>
+				</Authenticated>
+			</>
+		);
+	};
+
+	return (
+		<section className='mt-6 mb-40 md:mb-36'>
+			{/* Header */}
+			<div className='mb-6'>
+				<h2 className='font-medium text-white text-xl'>Playlists</h2>
+			</div>
+
+			{/* Main Content */}
+			<div className='flex flex-col gap-6 lg:flex-row'>
+				{/* Your Playlists Panel */}
+				<div className='order-2 w-full lg:order-0 lg:w-64 lg:flex-shrink-0'>
+					<div className='h-[50svh] overflow-y-auto rounded-2xl bg-white/5 shadow-[0_12px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur'>
+						<div className='sticky top-0 z-10 bg-[#10141E] px-4 py-4'>
+							<h3 className='font-medium text-white'>Your Playlists</h3>
+						</div>
+						{renderHistory()}
+					</div>
 				</div>
 
 				{/* Main Playlist Content */}
 				<div className='flex-1'>
-					<div className='max-h-[50svh] overflow-y-auto rounded-2xl bg-white/5 px-6 shadow-[0_12px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur sm:px-8'>
-						{displayData ? (
-							<>
-								{/* Playlist Header */}
-								<div className='sticky top-0 flex items-center gap-4 bg-[#10141E] py-6'>
-									<Button variant='gradient' size='gradient'>
-										<Icon icon='lucide:play' className='h-6 w-6 text-white' />
-										{/* Live ring */}
-										<span className='pointer-events-none absolute inset-0 rounded-full opacity-0 ring-4 ring-sky-400/30' />
-									</Button>
-									<div>
-										<h3 className='font-medium text-lg text-white'>
-											{displayData.title}
-										</h3>
-										<p className='text-sm text-white/60'>
-											{displayData.songs.length} tracks •{' '}
-											{selectedPlaylist
-												? 'Saved playlist'
-												: 'Generated playlist'}
-										</p>
-									</div>
-								</div>
-
-								{/* Song List */}
-								<div className='space-y-1'>
-									{displayData.songs.map((song, index) => (
-										<div
-											key={`${song.artist}-${song.title}-${index}`}
-											className='group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/5'
-										>
-											{/* Play icon */}
-											<Button variant='icon' size='icon'>
-												<Icon icon='lucide:play' className='h-4 w-4' />
-											</Button>
-
-											{/* Track number */}
-											<span className='w-4 text-sm text-white/40'>
-												{index + 1}
-											</span>
-
-											{/* Track info */}
-											<div className='min-w-0 flex-1'>
-												<p className='truncate font-medium text-sm text-white'>
-													{song.title}
-												</p>
-												<p className='text-white/50 text-xs'>{song.artist}</p>
-											</div>
-
-											{/* More options */}
-											<Button variant='icon' size='icon'>
-												<Icon
-													icon='lucide:more-horizontal'
-													className='h-4 w-4'
-												/>
-											</Button>
-										</div>
-									))}
-								</div>
-							</>
-						) : (
-							<div className='flex flex-col items-center justify-center py-16 text-center'>
-								<div className='mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
-									<Icon
-										icon='lucide:list-music'
-										className='h-8 w-8 text-white'
-									/>
-								</div>
-								<h3
-									className='mb-2 font-geist text-white text-xl tracking-tight'
-									style={{ fontWeight: 600 }}
+					<div className='h-[50svh] overflow-y-auto rounded-2xl bg-white/5 px-6 shadow-[0_12px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur sm:px-8'>
+						<AnimatePresence mode='wait'>
+							{isLoadingPlaylist ? (
+								<motion.div
+									key='loading'
+									variants={loadingVariants}
+									initial='hidden'
+									animate='visible'
+									exit='exit'
+									className='flex flex-col items-center justify-center py-16 text-center'
 								>
-									No playlists yet
-								</h3>
-								<p className='mb-6 max-w-md font-geist text-white/70'>
-									Kick things off by asking your AI DJ for a vibe. Your
-									creations will appear here.
-								</p>
-								<div className='flex flex-col items-center gap-3 sm:flex-row'>
-									<Button
-										variant='default'
-										size='sm'
-										className='bg-emerald-500/90 hover:bg-emerald-400'
+									<div className='mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
+										<Icon
+											icon='lucide:loader'
+											className='h-8 w-8 animate-spin text-white'
+										/>
+									</div>
+									<h3
+										className='mb-2 font-geist text-white text-xl tracking-tight'
+										style={{ fontWeight: 600 }}
 									>
-										Generate a playlist
-									</Button>
-									<Button variant='outline' size='sm'>
-										Import from file
-									</Button>
-								</div>
-							</div>
-						)}
+										Loading playlist...
+									</h3>
+									<p className='font-geist text-white/70'>
+										Fetching your saved playlist
+									</p>
+								</motion.div>
+							) : displayData ? (
+								<motion.div
+									key='playlist'
+									variants={containerVariants}
+									initial='hidden'
+									animate='visible'
+									exit='exit'
+								>
+									{/* Playlist Header */}
+									<div className='-mx-6 sm:-mx-8 sticky top-0 z-10 flex items-center justify-between bg-[#10141E] px-6 py-6 sm:px-8'>
+										<div className='flex items-center gap-4'>
+											<Button
+												variant='gradient'
+												size='gradient'
+												onClick={() => {
+													if (displayData.songs.length > 0) {
+														// Check if any song from the current playlist is playing
+														const isPlaylistPlaying = displayData.songs.some(
+															(song) =>
+																currentSong?.title === song.title &&
+																currentSong?.artist === song.artist,
+														);
+
+														if (isPlaylistPlaying) {
+															setIsPlaying(!isPlaying); // Pause
+														} else {
+															onPlaySong(displayData.songs[0]); // Play first song
+														}
+													}
+												}}
+											>
+												<Icon
+													icon={
+														displayData.songs.some(
+															(song) =>
+																currentSong?.title === song.title &&
+																currentSong?.artist === song.artist &&
+																isPlaying,
+														)
+															? 'lucide:pause'
+															: 'lucide:play'
+													}
+													className='h-6 w-6 text-white'
+												/>
+												{/* Live ring */}
+												<span className='pointer-events-none absolute inset-0 rounded-full opacity-0 ring-4 ring-sky-400/30' />
+											</Button>
+											<div>
+												<h3 className='font-medium text-lg text-white'>
+													{displayData.title}
+												</h3>
+												<p className='text-sm text-white/60'>
+													{displayData.songs.length} tracks •{' '}
+													{selectedPlaylist
+														? 'Saved playlist'
+														: 'Generated playlist'}
+												</p>
+											</div>
+										</div>
+										<div className='flex items-center gap-2'>
+											{selectedPlaylistId && (
+												<>
+													<Button
+														variant='icon'
+														size='icon'
+														className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
+														onClick={() => sharePlaylist(selectedPlaylistId)}
+													>
+														<Icon
+															icon='lucide:share-2'
+															className='h-4 w-4 text-white'
+														/>
+													</Button>
+													<Button
+														variant='icon'
+														size='icon'
+														className='rounded-md bg-red-500/20 ring-1 ring-red-500/30 backdrop-blur hover:bg-red-500/30'
+														onClick={() =>
+															handleDeletePlaylist(selectedPlaylistId)
+														}
+													>
+														<Icon
+															icon='lucide:trash-2'
+															className='h-4 w-4 text-red-400'
+														/>
+													</Button>
+												</>
+											)}
+										</div>
+									</div>
+
+									{/* Song List */}
+									<SongList
+										songs={displayData.songs}
+										onPlay={onPlaySong}
+										onRemoveSong={handleRemoveSong}
+									/>
+								</motion.div>
+							) : (
+								<motion.div
+									key='empty'
+									variants={loadingVariants}
+									initial='hidden'
+									animate='visible'
+									exit='exit'
+									className='flex h-full flex-col items-center justify-center pb-4 text-center'
+								>
+									<div className='mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/80 to-cyan-400/80 shadow-[0_8px_30px_rgba(16,185,129,0.25)] ring-1 ring-white/20'>
+										<Icon
+											icon='lucide:list-music'
+											className='h-8 w-8 text-white'
+										/>
+									</div>
+									<h3
+										className='mb-2 font-geist text-white text-xl tracking-tight'
+										style={{ fontWeight: 600 }}
+									>
+										No playlist selected
+									</h3>
+									<p className='max-w-md font-geist text-white/70'>
+										Select a playlist from your history or generate a new one
+										with your AI DJ.
+									</p>
+								</motion.div>
+							)}
+						</AnimatePresence>
 					</div>
 				</div>
 			</div>
 
-			{/* Community Playlists */}
-			<div className='mt-8'>
-				<h3 className='mb-4 font-medium text-lg text-white'>
-					Community Playlists
-				</h3>
-				<div className='grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1546443046-ed1ce6ffd1ab?q=80&w=800&auto=format&fit=crop'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Midnight Commute
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Alex</p>
-						</div>
-					</div>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1621619856624-42fd193a0661?w=1080&q=80'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Lo-Fi Study Room
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Priya</p>
-						</div>
-					</div>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=800&auto=format&fit=crop'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Neon Nights
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Kaito</p>
-						</div>
-					</div>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1642615835477-d303d7dc9ee9?w=1080&q=80'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Deep Work Flow
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Nora</p>
-						</div>
-					</div>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1483412033650-1015ddeb83d1?q=80&w=800&auto=format&fit=crop'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Sunset Drive
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Liam</p>
-						</div>
-					</div>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=800&auto=format&fit=crop'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Synthwave Sprint
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Jae</p>
-						</div>
-					</div>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1635151227785-429f420c6b9d?w=1080&q=80'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Coffee &amp; Code
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Sam</p>
-						</div>
-					</div>
-					{/* Card */}
-					<div className='group overflow-hidden rounded-xl bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur transition-all hover:bg-white/10 hover:shadow-[0_16px_48px_rgba(0,0,0,0.45)]'>
-						<div className='relative aspect-square overflow-hidden'>
-							<img
-								src='https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=800&auto=format&fit=crop'
-								alt='Playlist cover'
-								className='h-full w-full object-cover transition-transform duration-500 group-hover:scale-105'
-							/>
-							<div className='absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80' />
-							<div className='absolute right-2 bottom-2 left-2 flex items-center justify-between'>
-								<div className='flex items-center gap-1.5'>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:play' className='h-4 w-4 text-white' />
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon
-											icon='lucide:share-2'
-											className='h-4 w-4 text-white'
-										/>
-									</Button>
-									<Button
-										variant='icon'
-										size='icon'
-										className='rounded-md bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20'
-									>
-										<Icon icon='lucide:plus' className='h-4 w-4 text-white' />
-									</Button>
-								</div>
-							</div>
-						</div>
-						<div className='p-3'>
-							<p
-								className='truncate font-geist text-white tracking-tight'
-								style={{ fontWeight: 600 }}
-							>
-								Ambient Focus
-							</p>
-							<p className='font-geist text-sm text-white/60'>by Aria</p>
-						</div>
-					</div>
-				</div>
-			</div>
+			<CommunityPlaylists onSelectPlaylist={setSelectedPlaylistId} />
 		</section>
 	);
 };

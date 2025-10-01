@@ -1,10 +1,10 @@
 /** biome-ignore-all lint/a11y/noSvgWithoutTitle: <explanation> */
 'use client';
 import { Icon } from '@iconify/react';
-import Vapi from '@vapi-ai/web';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ModeToggle } from './mode-toggle';
+import { UserMenu } from './user-menu';
 
 export default function Header({ className }: { className?: string }) {
 	const links = [
@@ -18,20 +18,21 @@ export default function Header({ className }: { className?: string }) {
 			<div className='mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8'>
 				{/* Logo */}
 				<div className='flex items-center gap-3'>
-					<div className='flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-emerald-500 to-cyan-400 ring-1 ring-white/20'>
-						<span
-							className='font-geist font-medium text-white tracking-tight'
-							style={{ fontWeight: 500 }}
-						>
-							V
-						</span>
+					<div className='flex h-8 w-8 items-center justify-center overflow-hidden rounded-md'>
+						<Image
+							src='/logo.png'
+							alt='Vibify Logo'
+							width={32}
+							height={32}
+							className='h-full w-full object-cover'
+						/>
 					</div>
 					<div className='flex items-baseline gap-2'>
 						<span
 							className='font-geist text-lg text-white tracking-tight'
 							style={{ fontWeight: 600 }}
 						>
-							VYB
+							Vibify
 						</span>
 						<span className='rounded-full px-2 py-0.5 font-geist text-sm text-white/40 ring-1 ring-white/10'>
 							Beta
@@ -40,23 +41,7 @@ export default function Header({ className }: { className?: string }) {
 				</div>
 				{/* Profile */}
 				<div className='flex items-center gap-6'>
-					<button
-						className='group flex items-center gap-3 rounded-full px-2 py-1 transition-colors hover:bg-white/5'
-						type='button'
-					>
-						<img
-							src='https://images.unsplash.com/photo-1527980965255-d3b416303d12?q=80&w=100&auto=format&fit=crop'
-							alt='Avatar'
-							className='h-8 w-8 rounded-full object-cover ring-1 ring-white/20'
-						/>
-						<span className='hidden font-geist text-sm text-white/70 transition-colors group-hover:text-white lg:block'>
-							you@vyb
-						</span>
-						<Icon
-							icon='lucide:chevron-down'
-							className='h-4 w-4 text-white/60'
-						/>
-					</button>
+					<UserMenu />
 				</div>
 			</div>
 		</header>

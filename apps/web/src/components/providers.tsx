@@ -6,7 +6,9 @@ import { authClient } from '@/lib/auth-client';
 import { ThemeProvider } from './theme-provider';
 import { Toaster } from './ui/sonner';
 
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+export const convex = new ConvexReactClient(
+	process.env.NEXT_PUBLIC_CONVEX_URL!,
+);
 
 export default function Providers({ children }: { children: React.ReactNode }) {
 	return (

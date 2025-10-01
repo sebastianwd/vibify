@@ -8,12 +8,17 @@
  * @module
  */
 
+import type * as _integrations_invidious_invidious from "../_integrations/invidious/invidious.js";
+import type * as _integrations_lastfm_lastfm from "../_integrations/lastfm/lastfm.js";
+import type * as _utils_cache from "../_utils/cache.js";
+import type * as _utils_createQueryParam from "../_utils/createQueryParam.js";
 import type * as auth from "../auth.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as playlists from "../playlists.js";
 import type * as privateData from "../privateData.js";
 import type * as search from "../search.js";
+import type * as songs from "../songs.js";
 import type * as todos from "../todos.js";
 
 import type {
@@ -31,12 +36,17 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  "_integrations/invidious/invidious": typeof _integrations_invidious_invidious;
+  "_integrations/lastfm/lastfm": typeof _integrations_lastfm_lastfm;
+  "_utils/cache": typeof _utils_cache;
+  "_utils/createQueryParam": typeof _utils_createQueryParam;
   auth: typeof auth;
   healthCheck: typeof healthCheck;
   http: typeof http;
   playlists: typeof playlists;
   privateData: typeof privateData;
   search: typeof search;
+  songs: typeof songs;
   todos: typeof todos;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

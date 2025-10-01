@@ -33,8 +33,6 @@ export default function Hero({ setDj, onSearchResults }: HeroProps) {
 			console.log('Voice call ended');
 		},
 		onFunctionCall: async (functionCall, vapiRef) => {
-			console.log('Function call:', functionCall);
-			console.log('Function call2:', functionCall.function.name);
 			if (functionCall.function.name === 'search_music') {
 				const query = functionCall.function.arguments.query as string;
 

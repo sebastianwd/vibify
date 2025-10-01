@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import '../index.css';
 import Header from '@/components/header';
+import { FooterPlayer } from '@/components/player';
 import Providers from '@/components/providers';
 
 const geistSans = Geist({
@@ -15,8 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	title: 'my-better-t-app',
-	description: 'my-better-t-app',
+	title: 'Vibify - AI-Powered Music Discovery',
+	description:
+		'Vibify combines AI assistance with music discovery, allowing you to find and enjoy music through playlist generation and community sharing.',
 };
 
 export default function RootLayout({
@@ -34,6 +36,7 @@ export default function RootLayout({
 					<main className='mx-auto max-w-7xl px-4 sm:px-6 lg:px-8'>
 						{children}
 					</main>
+					<FooterPlayer />
 				</Providers>
 			</body>
 		</html>

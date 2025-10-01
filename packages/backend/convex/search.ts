@@ -6,6 +6,7 @@ import FirecrawlApp from '@mendable/firecrawl-js';
 import { v } from 'convex/values';
 import { api, components, internal } from './_generated/api';
 import { action } from './_generated/server';
+import { authComponent } from './auth';
 
 // Types - using implicit typing and derived types
 export type SearchResult = {
@@ -30,7 +31,7 @@ type SearchData = {
 	scrapedContent: any;
 	songs: Array<{ artist: string; title: string }>;
 	playlistTitle: string;
-	playlistId?: string; // Added playlistId
+	playlistId?: string;
 };
 
 export type SearchResponse = {
@@ -104,6 +105,8 @@ const tryScrapeUrls = async (urls: string[]): Promise<ScrapeResult> => {
 			const scrapeResult = await firecrawl.scrape(url, {
 				formats: ['markdown'],
 				onlyMainContent: true,
+				removeBase64Images: true,
+				storeInCache: true,
 			});
 			console.log(`Successfully scraped URL ${index + 1}`);
 			return { scrapeResult, selectedUrl: url };
@@ -125,7 +128,7 @@ const extractSongsFromContent = async (
 	originalQuery?: string,
 ): Promise<{ songs: string[]; title: string }> => {
 	const extractResult = await thread.generateText({
-		prompt: `Extract songs from this text in the format "Artist - Song Title" and generate a creative playlist title. Be very strict - only return actual songs with both artist and song name. The title should be catchy, descriptive, and capture the mood/vibe of the playlist.
+		prompt: `Extract songs from this text in the format "Artist - Song Title" and generate a creative playlist title. Be very strict - only return actual songs with both artist and song name, if you find album names, put them in the Song Title field. The title should be catchy, descriptive, and capture the mood/vibe of the playlist.
 
 Text: ${markdown}
 ${originalQuery ? `Original request: ${originalQuery}` : ''}
@@ -188,6 +191,8 @@ export const searchGoogle = action({
 				throw new Error('OPENAI_API_KEY environment variable is not set');
 			}
 
+			const user = await authComponent.safeGetAuthUser(ctx);
+
 			// Step 1: Optimize the search query using the agent
 			const { threadId, thread } = await searchAgent.createThread(ctx);
 			const optimizationResult = await thread.generateText({
@@ -216,6 +221,8 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 			});
 
 			const relevantUrls = JSON.parse(urlFilterResult.text.trim());
+
+			console.log('Relevant URLs:', relevantUrls);
 
 			// Step 4: Try scraping each URL until one succeeds
 			const { scrapeResult, selectedUrl } = await tryScrapeUrls(relevantUrls);
@@ -279,7 +286,7 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 
 						console.log(`Total unique songs: ${combinedSongs.length}`);
 
-						if (combinedSongs.length >= 10) {
+						if (combinedSongs.length >= 1) {
 							// Generate new title for combined songs
 
 							return {
@@ -317,13 +324,18 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 				};
 			});
 
-			// Schedule playlist save for background execution (non-blocking)
-			await ctx.scheduler.runAfter(0, api.playlists.savePlaylist, {
-				title: playlistTitle,
-				songs: structuredSongs,
-				searchQuery: optimizedQuery,
-				sourceUrl: selectedUrl,
-			});
+			console.log('Structured user?._id:', user?._id);
+			let playlistId: string | undefined;
+			if (user?._id) {
+				// Save playlist immediately to get the ID
+				playlistId = await ctx.runMutation(api.playlists.savePlaylist, {
+					userId: user._id,
+					title: playlistTitle,
+					songs: structuredSongs,
+					searchQuery: optimizedQuery,
+					sourceUrl: selectedUrl,
+				});
+			}
 
 			return {
 				success: true,
@@ -335,6 +347,7 @@ Return format: ["url1", "url2", "url3", "url4"]`,
 					scrapedContent: scrapeResult,
 					songs: structuredSongs,
 					playlistTitle,
+					playlistId,
 				},
 				originalQuery: args.query,
 				optimizedQuery,

@@ -1,5 +1,5 @@
 {
-  "name": "my-better-t-app",
+  "name": "vibify",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -19,7 +19,16 @@
   "dependencies": {},
   "devDependencies": {
     "turbo": "^2.5.4",
-    "@biomejs/biome": "^2.2.0"
+    "@biomejs/biome": "^2.2.0",
+    "typescript": "catalog:"
+  },
+  "pnpm": {
+    "overrides": {
+      "react": "catalog:",
+      "react-dom": "catalog:",
+      "@types/react": "catalog:",
+      "@types/react-dom": "catalog:"
+    }
   },
   "packageManager": "pnpm@10.17.1"
 }
