@@ -1,3 +1,4 @@
+'use client';
 import { Icon } from '@iconify/react';
 import { api } from '@my-better-t-app/backend/convex/_generated/api';
 import type { Id } from '@my-better-t-app/backend/convex/_generated/dataModel';
