@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import SignInForm from "@/components/sign-in-form";
-import SignUpForm from "@/components/sign-up-form";
-import UserMenu from "@/components/user-menu";
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
+import { api } from '@my-better-t-app/backend/convex/_generated/api';
 import {
 	Authenticated,
 	AuthLoading,
 	Unauthenticated,
 	useQuery,
-} from "convex/react";
-import { useState } from "react";
+} from 'convex/react';
+import { useState } from 'react';
+import SignInForm from '@/components/sign-in-form';
+import SignUpForm from '@/components/sign-up-form';
+import { UserMenu } from '@/components/user-menu';
 
 export default function DashboardPage() {
 	const [showSignIn, setShowSignIn] = useState(false);
