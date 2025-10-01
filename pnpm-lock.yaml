@@ -115,6 +115,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      convex:
+        specifier: 'catalog:'
+        version: 1.27.3(react@19.1.1)
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.2.0
