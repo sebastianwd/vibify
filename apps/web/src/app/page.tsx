@@ -1,9 +1,10 @@
 'use client';
+import { Icon } from '@iconify/react';
 import { api } from '@my-better-t-app/backend/convex/_generated/api';
 import type { Id } from '@my-better-t-app/backend/convex/_generated/dataModel';
 import type { SearchResponse } from '@my-better-t-app/backend/convex/search';
 import { useQuery } from 'convex/react';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import DjSection from '@/components/dj-section';
 import { PlaylistsSection } from '@/components/playlists-section';
 import { VideoPlayer } from '@/components/video-player';
@@ -55,11 +56,13 @@ export default function Home() {
 					<VideoPlayer />
 				</div>
 			</div>
-			<PlaylistsSection
-				selectedPlaylistId={selectedPlaylistId}
-				setSelectedPlaylistId={setSelectedPlaylistId}
-				currentPlaylist={currentPlaylist}
-			/>
+			<Suspense>
+				<PlaylistsSection
+					selectedPlaylistId={selectedPlaylistId}
+					setSelectedPlaylistId={setSelectedPlaylistId}
+					currentPlaylist={currentPlaylist}
+				/>
+			</Suspense>
 		</>
 	);
 }
